@@ -1,5 +1,3 @@
-use super::file_reader::TRUE;
-
 pub enum Error {
     FILE_NOT_FOUND(String),
 }

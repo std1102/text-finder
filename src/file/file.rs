@@ -1,3 +1,6 @@
+use std::{ops::Index, slice::SliceIndex};
+
+#[derive(Debug, Default, Clone)]
 pub struct FileProperties {
     pub file_name: String,
     pub file_size: f32,
@@ -6,8 +9,12 @@ pub struct FileProperties {
     pub path: String,
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct File {
     pub properties: FileProperties,
-    pub content: Vec<Vec<String>>,
+    // Line by line read
+    pub content: Vec<String>,
     pub children: Vec<File>,
 }
+
+pub const BLOCK_SIZE: usize = 8;

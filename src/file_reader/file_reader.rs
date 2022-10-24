@@ -1,25 +1,20 @@
-use crate::{
-    common,
-    file::file::{File, FileProperties},
-};
+use crate::file::file::{File, FileProperties};
 use std::{
-    f32::consts::E,
-    fs::{self, Metadata},
-    io::{BufRead, BufReader, Read},
-    path::{Path, PathBuf},
+    fs::{self},
+    io::{BufRead, Read},
+    path::PathBuf,
 };
 
-use super::exception::READ_RESULT;
+use super::result::READ_RESULT;
 
 pub const TRUE: i8 = 1;
 pub const FALSE: i8 = 0;
 pub const ERROR: i8 = -1;
-pub const BLOCK_SIZE: usize = 8;
 
 pub trait FileReader {
     fn get_absolute_path(path: &str) -> READ_RESULT<String>;
 
-    fn get_file_content(path: &str) -> Vec<String>;
+    fn get_file_content(file: File) -> Vec<String>;
 
     fn get_file_name(path: &str) -> READ_RESULT<String>;
 
@@ -55,7 +50,7 @@ impl FileReader for FileReaderImpl {
     fn get_absolute_path(path: &str) -> READ_RESULT<String> {
         let src_dir = PathBuf::from(path).canonicalize();
         match src_dir {
-            Err(e) => {
+            Err(_) => {
                 return READ_RESULT::ERROR;
             }
             Ok(srcdir) => {
@@ -75,8 +70,28 @@ impl FileReader for FileReaderImpl {
         }
     }
 
-    fn get_file_content(path: &str) -> Vec<String> {
-        todo!()
+    fn get_file_content(file: File) -> Vec<String> {
+        let _file = std::fs::File::open(&file.properties.path);
+        let mut rs = Vec::new();
+        match _file {
+            Ok(f) => {
+                let reader = std::io::BufReader::new(f);
+                reader.lines().for_each(|f| -> () {
+                    match f {
+                        Ok(line) => {
+                            rs.push(line);
+                        }
+                        Err(e) => {
+                            println!("{}", e.kind());
+                        }
+                    }
+                })
+            }
+            Err(e) => {
+                println!("{}", e.kind());
+            }
+        }
+        rs
     }
 
     fn get_file_name(path: &str) -> READ_RESULT<String> {
@@ -141,26 +156,18 @@ impl FileReader for FileReaderImpl {
 
     // TODO FIX THIS ERROR
     fn is_binary(path: &str) -> READ_RESULT<i8> {
-        let mut file = std::fs::File::open(path);
+        let file = std::fs::File::open(path);
         match file {
-            Ok(_file) => {
-                let start_time = common::common::get_current_milis();
-                let mut ffile = _file;
+            Ok(mut _file) => {
                 let mut byte_arr: [u8; 8] = [0; 8];
-                let str_byte = ffile.read_exact(&mut byte_arr);
+                _file.read_exact(&mut byte_arr).unwrap_or_else(|e| -> () {
+                    println!("{:?}", e);
+                });
                 match std::str::from_utf8(&byte_arr) {
-                    Err(e) => {
-                        println!(
-                            "is binary {}",
-                            (common::common::get_current_milis() - start_time)
-                        );
+                    Err(_) => {
                         return READ_RESULT::TRUE(TRUE);
                     }
-                    Ok(e) => {
-                        println!(
-                            "is not binary {}",
-                            (common::common::get_current_milis() - start_time)
-                        );
+                    Ok(_) => {
                         return READ_RESULT::FALSE;
                     }
                 };
