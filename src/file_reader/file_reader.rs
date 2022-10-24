@@ -87,9 +87,8 @@ impl FileReader for FileReaderImpl {
         match Self::is_exist(path) {
             READ_RESULT::FALSE => {
                 return result;
-            },
+            }
             READ_RESULT::TRUE(_) => {
-
                 let mut file = File {
                     content: Vec::new(),
                     children: Vec::new(),
@@ -127,21 +126,32 @@ impl FileReader for FileReaderImpl {
                     });
                     return result;
                 }
-            },
+            }
             READ_RESULT::ERROR => return result,
         };
     }
 
     // TODO FIX THIS ERROR
     fn is_binary(path: &str) -> READ_RESULT<i8> {
-        let reader = BufReader::new(std::fs::File::open(path).expect("CANNOT OPEN FILE"));
-        match reader.lines().next() {
-            None => {
-                return READ_RESULT::TRUE(TRUE);
-            },
-            Some(_) => {
-                return READ_RESULT::FALSE;
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .read(true)
+            .open(path);
+        match file {
+            Ok(_file) => {
+                let reader = BufReader::new(_file);
+                match reader.lines().next() {
+                    None => {
+                        return READ_RESULT::TRUE(TRUE);
+                    }
+                    Some(_) => {
+                        return READ_RESULT::FALSE;
+                    }
+                };
             }
-        };
+            Err(_) => {
+                return READ_RESULT::ERROR;
+            }
+        }
     }
 }
