@@ -1,8 +1,11 @@
-use crate::file::file::{File, FileProperties};
+use crate::{
+    common,
+    file::file::{File, FileProperties},
+};
 use std::{
     f32::consts::E,
     fs::{self, Metadata},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
 };
 
@@ -63,7 +66,13 @@ impl FileReader for FileReaderImpl {
     }
 
     fn get_file_size(path: &str) -> READ_RESULT<f32> {
-        todo!()
+        match fs::metadata(path) {
+            Ok(md) => {
+                let raw_length = md.len();
+                READ_RESULT::TRUE((raw_length / 1024) as f32)
+            }
+            Err(_) => READ_RESULT::ERROR,
+        }
     }
 
     fn get_file_content(path: &str) -> Vec<String> {
@@ -73,8 +82,8 @@ impl FileReader for FileReaderImpl {
     fn get_file_name(path: &str) -> READ_RESULT<String> {
         let path_to_file = Self::get_absolute_path(path);
         match path_to_file {
-            READ_RESULT::TRUE(path) => {
-                let file = std::path::Path::new(&path).file_name().unwrap();
+            READ_RESULT::TRUE(_path) => {
+                let file = std::path::Path::new(&_path).file_name().unwrap();
                 READ_RESULT::TRUE(String::from(file.to_str().unwrap()))
             }
             READ_RESULT::FALSE => todo!(),
@@ -89,12 +98,12 @@ impl FileReader for FileReaderImpl {
                 return result;
             }
             READ_RESULT::TRUE(_) => {
-                let mut file = File {
+                let file = File {
                     content: Vec::new(),
                     children: Vec::new(),
                     properties: FileProperties {
                         file_name: Self::get_file_name(path).get_context().to_string(),
-                        file_size: 0.0,
+                        file_size: Self::get_file_size(path).get_context().to_owned(),
                         is_binary: match Self::is_binary(path) {
                             READ_RESULT::TRUE(_) => TRUE,
                             READ_RESULT::FALSE => FALSE,
@@ -113,7 +122,6 @@ impl FileReader for FileReaderImpl {
                     if file.properties.is_binary == TRUE {
                         return result;
                     } else {
-                        println!("{}", &file.properties.path);
                         result.push(file);
                         return result;
                     }
@@ -133,18 +141,26 @@ impl FileReader for FileReaderImpl {
 
     // TODO FIX THIS ERROR
     fn is_binary(path: &str) -> READ_RESULT<i8> {
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .read(true)
-            .open(path);
+        let mut file = std::fs::File::open(path);
         match file {
             Ok(_file) => {
-                let reader = BufReader::new(_file);
-                match reader.lines().next() {
-                    None => {
+                let start_time = common::common::get_current_milis();
+                let mut ffile = _file;
+                let mut byte_arr: [u8; 8] = [0; 8];
+                let str_byte = ffile.read_exact(&mut byte_arr);
+                match std::str::from_utf8(&byte_arr) {
+                    Err(e) => {
+                        println!(
+                            "is binary {}",
+                            (common::common::get_current_milis() - start_time)
+                        );
                         return READ_RESULT::TRUE(TRUE);
                     }
-                    Some(_) => {
+                    Ok(e) => {
+                        println!(
+                            "is not binary {}",
+                            (common::common::get_current_milis() - start_time)
+                        );
                         return READ_RESULT::FALSE;
                     }
                 };

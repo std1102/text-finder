@@ -12,7 +12,7 @@ fn main() {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("ASD")
         .as_millis();
-    let files: Vec<File> = FileReaderImpl::get_meta_data_recursively(r#"C:\Users\luyen\Desktop\Projects\Rs\text-finder\src"#);
+    let files: Vec<File> = FileReaderImpl::get_meta_data_recursively(r#"D:\Project"#);
     println!("total files {}", &files.len());
     println!(
         "IT TAKES {}",
