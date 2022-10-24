@@ -1,24 +1,25 @@
 use file::file::{File, FileProperties};
+use file_reader::file_reader::FileReaderImpl;
 
 use crate::file_reader::file_reader::FileReader;
 
+pub mod common;
 pub mod file;
 pub mod file_reader;
 
 fn main() {
-    let mut file_properties = FileProperties {
-        file_name: String::from("./Cargo.lock"),
-        is_folder: false,
-        path: String::from("./Cargo.lock"),
-        file_size: 32.5,
-    };
-
-    let mut file = File {
-        content: Vec::new(),
-        properties: file_properties,
-    };
+    let start_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("ASD")
+        .as_millis();
+    let files: Vec<File> = FileReaderImpl::get_meta_data_recursively(r#"C:\Users\luyen\Desktop\Projects\Rs\text-finder\src"#);
+    println!("total files {}", &files.len());
     println!(
-        "{}",
-        file_reader::file_reader::FileReaderImpl::get_absolute_path(&mut file)
+        "IT TAKES {}",
+        (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("ASD")
+            .as_millis()
+            - start_time)
     );
 }
