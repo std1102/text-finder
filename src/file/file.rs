@@ -11,8 +11,8 @@ pub struct FileProperties {
 
 #[derive(Debug, Default, Clone)]
 pub struct File {
+    pub is_error: bool,
     pub properties: FileProperties,
-    // Line by line read
     pub content: Vec<String>,
     pub children: Vec<File>,
 }
