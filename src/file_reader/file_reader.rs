@@ -57,19 +57,22 @@ pub trait FileReader {
                         let file_size = ((md.len() / 1024) as f32).ceil();
                         file.properties.file_size = file_size;
                     }
-                    Err(e) => return file,
+                    Err(e) => {
+                        return file
+                    },
                 }
                 file.is_error = false;
                 file
             }
-            READ_RESULT::FALSE => file,
+            READ_RESULT::FALSE => {
+                file
+            },
             READ_RESULT::ERROR => file,
         }
     }
 }
 
 pub struct FileReaderImpl {
-    pub rayon_thread_pool: ThreadPool,
 }
 
 impl FileReader for FileReaderImpl {
