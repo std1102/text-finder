@@ -1,27 +1,28 @@
+use common::common as SysTime;
 use file_reader::file_reader::{AsyncFileEmitter, AsyncFileReciever};
-use futures::{executor, future, join, FutureExt};
-use std::{sync::mpsc, thread};
-
+use futures::{executor, future, join, lock::Mutex, FutureExt};
+use std::{
+    sync::{mpsc, Arc},
+    thread,
+};
 pub mod common;
 pub mod file;
 pub mod file_reader;
 mod reactive;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    let start_time = SysTime::get_current_milis();
     let (tx, rx) = mpsc::channel();
-    // let reciever = AsyncFileReciever::distribute(rx, 8);
-    // let runtime = tokio::runtime::Runtime::new().unwrap();
-    // runtime.block_on(
-    //     runtime.spawn(async move {reciever.await;})
-    // );
-    // futures::future::join(emiter, reciever).await;
 
-    tokio::spawn(async move {
-        AsyncFileEmitter::emit(tx, "C:\\Users\\luyen\\Desktop\\Projects").await;
+    let t1 = thread::spawn(move || {
+        AsyncFileEmitter::emit(tx, "C:\\Users\\luyen");
     });
 
-    tokio::spawn(async move {
-        AsyncFileReciever::distribute(rx, 8).await;
+    let t2 = thread::spawn(move || {
+        AsyncFileReciever::distribute(rx, 8);
     });
+
+    t1.join().unwrap();
+    t2.join().unwrap();
+    println!("IT TAKES {}ms", SysTime::get_current_milis() - start_time);
 }

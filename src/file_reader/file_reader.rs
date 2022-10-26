@@ -1,4 +1,5 @@
 use queues::*;
+use std::thread;
 extern crate queues;
 
 use crate::{
@@ -103,7 +104,7 @@ pub struct AsyncFileEmitter {}
 pub struct AsyncFileReciever {}
 
 impl AsyncFileEmitter {
-    pub async fn emit(transmitter: Sender<File>, path: &str) {
+    pub fn emit(transmitter: Sender<File>, path: &str) {
         let start_time = SysTime::get_current_milis();
         Self::interval_file(transmitter, path);
         println!(
@@ -119,7 +120,6 @@ impl AsyncFileEmitter {
         } else if file.properties.is_folder != TRUE {
             match transmitter.send(file) {
                 Ok(file_msg) => {
-                    println!("SENDING FILE");
                     return;
                 }
                 Err(error_msg) => {
@@ -146,22 +146,21 @@ impl AsyncFileEmitter {
 }
 
 impl AsyncFileReciever {
-    pub async fn distribute(recieve: Receiver<File>, thread_size: usize) {
+    pub fn distribute(recieve: Receiver<File>, thread_size: usize) {
         let mut queues: Vec<Queue<File>> = Vec::with_capacity(thread_size);
-        let mut chanels: Vec<(Sender<File>, Receiver<File>)> = Vec::with_capacity(8);
+        let mut chanels: Vec<Sender<File>> = Vec::with_capacity(thread_size);
         for i in 0..thread_size {
             queues.push(Queue::new());
-            chanels.push(mpsc::channel());
-            let rx = &chanels[i].1;
-            text_finder::find_text(rx).await;
+            let (sender, reciever) = mpsc::channel();
+            chanels.push(sender);
+            thread::spawn(move || text_finder::find_text(reciever));
         }
         let mut index = 0;
         loop {
             match recieve.recv() {
                 Ok(file) => {
                     index = index + 1;
-                    println!("RECIEVE FILE");
-                    match chanels[&index % thread_size].0.send(file) {
+                    match chanels[&index % thread_size].send(file) {
                         Ok(ok) => continue,
                         Err(e) => continue,
                     }
