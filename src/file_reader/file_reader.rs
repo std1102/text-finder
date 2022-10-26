@@ -1,12 +1,19 @@
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use queues::*;
+extern crate queues;
 
-use crate::file::file::{File, FileProperties};
+use crate::{
+    common,
+    file::file::{File, FileProperties},
+};
 use std::{
     fs::{self, metadata},
     io::{BufRead, ErrorKind, Read},
     path::{Path, PathBuf},
+    sync::mpsc::{self, Receiver, Sender},
     thread::Thread,
 };
+
+use common::common as SysTime;
 
 use super::result::READ_RESULT;
 
@@ -57,23 +64,18 @@ pub trait FileReader {
                         let file_size = ((md.len() / 1024) as f32).ceil();
                         file.properties.file_size = file_size;
                     }
-                    Err(e) => {
-                        return file
-                    },
+                    Err(e) => return file,
                 }
                 file.is_error = false;
                 file
             }
-            READ_RESULT::FALSE => {
-                file
-            },
+            READ_RESULT::FALSE => file,
             READ_RESULT::ERROR => file,
         }
     }
 }
 
-pub struct FileReaderImpl {
-}
+pub struct FileReaderImpl {}
 
 impl FileReader for FileReaderImpl {
     fn get_meta_data_recursively(path: &str) -> Vec<File> {
@@ -93,5 +95,82 @@ impl FileReader for FileReaderImpl {
             });
         }
         return result;
+    }
+}
+
+pub struct AsyncFileEmitter {}
+pub struct AsyncFileReciever {}
+
+impl AsyncFileEmitter {
+    pub async fn emit(transmitter: Sender<File>, path: &str) {
+        println!("START ASYNC TASK");
+        let start_time = SysTime::get_current_milis();
+        Self::interval_file(transmitter, path);
+        println!(
+            "ASYNC TASK TAKES {}",
+            SysTime::get_current_milis() - start_time
+        );
+    }
+
+    pub fn interval_file(transmitter: Sender<File>, path: &str) {
+        let mut file = FileReaderImpl::get_file_info(path);
+        if file.is_error {
+            return;
+        } else if file.properties.is_folder != TRUE {
+            match transmitter.send(file) {
+                Ok(file_msg) => {
+                    return;
+                }
+                Err(error_msg) => {
+                    println!("ERROR FROM TRANSMITTER {:?}", error_msg);
+                }
+            }
+        } else {
+            let paths = fs::read_dir(file.properties.path);
+            match paths {
+                Ok(ok_path) => {
+                    ok_path.into_iter().for_each(|os_path| {
+                        Self::interval_file(
+                            transmitter.clone(),
+                            os_path.unwrap().path().as_os_str().to_str().unwrap(),
+                        );
+                    });
+                }
+                Err(err) => {
+                    return;
+                }
+            }
+        }
+    }
+}
+
+impl AsyncFileReciever {
+    pub fn contribute(recieve: Receiver<File>, thread_size: usize) {
+        let mut queues: Vec<Queue<File>> = Vec::with_capacity(thread_size);
+        for i in 0..thread_size {
+            queues.push(Queue::new());
+        }
+        let mut index = 0;
+        loop {
+            match recieve.recv() {
+                Ok(file) => {
+                    index = index + 1;
+                    match queues.iter_mut().min_by(|a, b| a.size().cmp(&b.size())) {
+                        Some(quiu) => {
+                            quiu.add(file).unwrap();
+                        }
+                        None => {
+                            println!("NOT FOUND QUEUE");
+                            continue;
+                        }
+                    }
+                }
+                Err(err) => {
+                    println!("ERROR FROM RECIEVER {:?}", err);
+                    break;
+                }
+            }
+        }
+        println!("TOTAL MESSAGE {}", index);
     }
 }
