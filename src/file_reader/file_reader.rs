@@ -4,6 +4,7 @@ extern crate queues;
 use crate::{
     common,
     file::file::{File, FileProperties},
+    file_reader::text_finder,
 };
 use std::{
     fs::{self, metadata},
@@ -103,7 +104,6 @@ pub struct AsyncFileReciever {}
 
 impl AsyncFileEmitter {
     pub async fn emit(transmitter: Sender<File>, path: &str) {
-        println!("START ASYNC TASK");
         let start_time = SysTime::get_current_milis();
         Self::interval_file(transmitter, path);
         println!(
@@ -119,6 +119,7 @@ impl AsyncFileEmitter {
         } else if file.properties.is_folder != TRUE {
             match transmitter.send(file) {
                 Ok(file_msg) => {
+                    println!("SENDING FILE");
                     return;
                 }
                 Err(error_msg) => {
@@ -145,25 +146,39 @@ impl AsyncFileEmitter {
 }
 
 impl AsyncFileReciever {
-    pub fn contribute(recieve: Receiver<File>, thread_size: usize) {
+    pub async fn distribute(recieve: Receiver<File>, thread_size: usize) {
         let mut queues: Vec<Queue<File>> = Vec::with_capacity(thread_size);
+        let mut chanels: Vec<(Sender<File>, Receiver<File>)> = Vec::with_capacity(8);
         for i in 0..thread_size {
             queues.push(Queue::new());
+            chanels.push(mpsc::channel());
+            let rx = &chanels[i].1;
+            text_finder::find_text(rx).await;
         }
         let mut index = 0;
         loop {
             match recieve.recv() {
                 Ok(file) => {
                     index = index + 1;
-                    match queues.iter_mut().min_by(|a, b| a.size().cmp(&b.size())) {
-                        Some(quiu) => {
-                            quiu.add(file).unwrap();
-                        }
-                        None => {
-                            println!("NOT FOUND QUEUE");
-                            continue;
-                        }
+                    println!("RECIEVE FILE");
+                    match chanels[&index % thread_size].0.send(file) {
+                        Ok(ok) => continue,
+                        Err(e) => continue,
                     }
+                    // match queues.iter_mut().min_by(|a, b| a.size().cmp(&b.size())) {
+                    //     Some(quiu) => {
+                    //         // quiu.add(file).unwrap();
+                    //         println!("{}", &file.properties.path);
+                    //         match chanels[&index % thread_size].0.send(file) {
+                    //             Ok(ok) => continue,
+                    //             Err(e) => continue,
+                    //         }
+                    //     }
+                    //     None => {
+                    //         println!("NOT FOUND QUEUE");
+                    //         continue;
+                    //     }
+                    // }
                 }
                 Err(err) => {
                     println!("ERROR FROM RECIEVER {:?}", err);
