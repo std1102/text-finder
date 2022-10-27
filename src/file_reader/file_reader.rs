@@ -1,8 +1,14 @@
-use crate::file::file::{File, FileProperties};
+use std::{sync::Arc, thread};
+
+use crate::{
+    common,
+    file::file::{File, FileProperties},
+    file_reader::text_finder,
+};
 use std::{
-    fs::{self},
-    io::{BufRead, Read},
-    path::PathBuf,
+    fs::{self, metadata},
+    path::{Path, PathBuf},
+    sync::mpsc::{self, Receiver, Sender},
 };
 
 use super::result::READ_RESULT;
@@ -12,168 +18,144 @@ pub const FALSE: i8 = 0;
 pub const ERROR: i8 = -1;
 
 pub trait FileReader {
-    fn get_absolute_path(path: &str) -> READ_RESULT<String>;
-
-    fn get_file_content(file: File) -> Vec<String>;
-
-    fn get_file_name(path: &str) -> READ_RESULT<String>;
-
-    fn get_file_size(path: &str) -> READ_RESULT<f32>;
-
     fn get_meta_data_recursively(path: &str) -> Vec<File>;
 
-    fn is_binary(path: &str) -> READ_RESULT<i8>;
-
-    fn is_exist(path: &str) -> READ_RESULT<i8>;
-
-    fn is_folder(path: &str) -> READ_RESULT<i8>;
-}
-
-pub struct FileReaderImpl;
-
-impl FileReader for FileReaderImpl {
-    fn is_folder(path: &str) -> READ_RESULT<i8> {
-        let md = fs::metadata(path).unwrap();
-        match md.is_dir() {
+    fn is_exist(path: &str) -> READ_RESULT<i8> {
+        match std::path::Path::new(path).exists() {
             true => READ_RESULT::TRUE(TRUE),
             false => READ_RESULT::FALSE,
         }
     }
 
-    fn is_exist(path: &str) -> READ_RESULT<i8> {
-        if std::path::Path::new(path).exists() {
-            return READ_RESULT::TRUE(TRUE);
-        }
-        READ_RESULT::FALSE
-    }
-
-    fn get_absolute_path(path: &str) -> READ_RESULT<String> {
-        let src_dir = PathBuf::from(path).canonicalize();
-        match src_dir {
-            Err(_) => {
-                return READ_RESULT::ERROR;
-            }
-            Ok(srcdir) => {
-                let absolute_path = String::from(srcdir.as_os_str().to_str().unwrap());
-                return READ_RESULT::TRUE(absolute_path);
-            }
-        }
-    }
-
-    fn get_file_size(path: &str) -> READ_RESULT<f32> {
-        match fs::metadata(path) {
-            Ok(md) => {
-                let raw_length = md.len();
-                READ_RESULT::TRUE((raw_length / 1024) as f32)
-            }
-            Err(_) => READ_RESULT::ERROR,
-        }
-    }
-
-    fn get_file_content(file: File) -> Vec<String> {
-        let _file = std::fs::File::open(&file.properties.path);
-        let mut rs = Vec::new();
-        match _file {
-            Ok(f) => {
-                let reader = std::io::BufReader::new(f);
-                reader.lines().for_each(|f| -> () {
-                    match f {
-                        Ok(line) => {
-                            rs.push(line);
-                        }
-                        Err(e) => {
-                            println!("{}", e.kind());
-                        }
+    fn get_file_info(path: &str) -> File {
+        let mut file = File {
+            is_error: true,
+            content: Vec::new(),
+            children: Vec::new(),
+            properties: FileProperties {
+                file_name: String::from("--ERROR--"),
+                file_size: 0.0,
+                is_binary: ERROR,
+                is_folder: ERROR,
+                path: String::from("--ERROR--"),
+            },
+        };
+        match Self::is_exist(path) {
+            READ_RESULT::TRUE(_) => {
+                file.properties.path = path.to_string();
+                let _path = Path::new(path);
+                if _path.is_dir() {
+                    file.properties.is_folder = TRUE;
+                } else {
+                    file.properties.is_folder = FALSE;
+                }
+                match _path.file_name() {
+                    Some(f_name) => {
+                        file.properties.file_name = f_name.to_str().unwrap().to_string();
                     }
-                })
+                    None => return file,
+                }
+                match _path.metadata() {
+                    Ok(md) => {
+                        let file_size = ((md.len() / 1024) as f32).ceil();
+                        file.properties.file_size = file_size;
+                    }
+                    Err(e) => return file,
+                }
+                file.is_error = false;
+                file
             }
-            Err(e) => {
-                println!("{}", e.kind());
-            }
-        }
-        rs
-    }
-
-    fn get_file_name(path: &str) -> READ_RESULT<String> {
-        let path_to_file = Self::get_absolute_path(path);
-        match path_to_file {
-            READ_RESULT::TRUE(_path) => {
-                let file = std::path::Path::new(&_path).file_name().unwrap();
-                READ_RESULT::TRUE(String::from(file.to_str().unwrap()))
-            }
-            READ_RESULT::FALSE => todo!(),
-            READ_RESULT::ERROR => todo!(),
+            READ_RESULT::FALSE => file,
+            READ_RESULT::ERROR => file,
         }
     }
+}
 
+pub struct FileReaderImpl {}
+
+impl FileReader for FileReaderImpl {
     fn get_meta_data_recursively(path: &str) -> Vec<File> {
         let mut result: Vec<File> = Vec::new();
-        match Self::is_exist(path) {
-            READ_RESULT::FALSE => {
-                return result;
-            }
-            READ_RESULT::TRUE(_) => {
-                let file = File {
-                    content: Vec::new(),
-                    children: Vec::new(),
-                    properties: FileProperties {
-                        file_name: Self::get_file_name(path).get_context().to_string(),
-                        file_size: Self::get_file_size(path).get_context().to_owned(),
-                        is_binary: match Self::is_binary(path) {
-                            READ_RESULT::TRUE(_) => TRUE,
-                            READ_RESULT::FALSE => FALSE,
-                            READ_RESULT::ERROR => ERROR,
-                        },
-                        is_folder: match Self::is_folder(path) {
-                            READ_RESULT::TRUE(_) => TRUE,
-                            READ_RESULT::FALSE => FALSE,
-                            READ_RESULT::ERROR => ERROR,
-                        },
-                        path: Self::get_absolute_path(path).get_context().to_string(),
-                    },
-                };
+        let file = Self::get_file_info(path);
 
-                if file.properties.is_folder != TRUE {
-                    if file.properties.is_binary == TRUE {
-                        return result;
-                    } else {
-                        result.push(file);
-                        return result;
-                    }
-                } else {
-                    let paths = fs::read_dir(file.properties.path).unwrap();
-                    paths.into_iter().for_each(|p| -> () {
-                        result.append(&mut Self::get_meta_data_recursively(
-                            p.unwrap().path().as_os_str().to_str().unwrap(),
-                        ))
-                    });
-                    return result;
-                }
-            }
-            READ_RESULT::ERROR => return result,
-        };
+        if file.is_error {
+            return result;
+        } else if file.properties.is_folder != TRUE {
+            result.push(file);
+        } else {
+            let paths = fs::read_dir(file.properties.path).unwrap();
+            paths.for_each(|p| -> () {
+                result.append(&mut Self::get_meta_data_recursively(
+                    p.unwrap().path().as_os_str().to_str().unwrap(),
+                ))
+            });
+        }
+        return result;
+    }
+}
+
+pub struct AsyncFileEmitter {}
+pub struct AsyncFileReciever {}
+
+impl AsyncFileEmitter {
+    pub fn emit(transmitter: Sender<File>, path: &str) {
+        Self::interval_file(transmitter, path);
     }
 
-    // TODO FIX THIS ERROR
-    fn is_binary(path: &str) -> READ_RESULT<i8> {
-        let file = std::fs::File::open(path);
-        match file {
-            Ok(mut _file) => {
-                let mut byte_arr: [u8; 8] = [0; 8];
-                _file.read_exact(&mut byte_arr).unwrap_or_else(|e| -> () {
-                    println!("{:?}", e);
-                });
-                match std::str::from_utf8(&byte_arr) {
-                    Err(_) => {
-                        return READ_RESULT::TRUE(TRUE);
-                    }
-                    Ok(_) => {
-                        return READ_RESULT::FALSE;
-                    }
-                };
+    pub fn interval_file(transmitter: Sender<File>, path: &str) {
+        let file = FileReaderImpl::get_file_info(path);
+        if file.is_error {
+            return;
+        } else if file.properties.is_folder != TRUE {
+            match transmitter.send(file) {
+                Ok(_) => {}
+                Err(error_msg) => {
+                    println!("Error when sending file :: {}", error_msg)
+                }
             }
-            Err(_) => {
-                return READ_RESULT::ERROR;
+        } else {
+            let paths = fs::read_dir(file.properties.path);
+            match paths {
+                Ok(ok_path) => {
+                    ok_path.into_iter().for_each(|os_path| {
+                        Self::interval_file(
+                            transmitter.clone(),
+                            os_path.unwrap().path().as_os_str().to_str().unwrap(),
+                        );
+                    });
+                }
+                Err(_) => {}
+            }
+        }
+    }
+}
+
+impl AsyncFileReciever {
+    pub fn distribute(recieve: Receiver<File>, thread_size: usize, find_text: String) {
+        let mut chanels: Vec<Sender<File>> = Vec::with_capacity(thread_size);
+        for _ in 0..thread_size {
+            let (sender, reciever) = mpsc::channel();
+            chanels.push(sender);
+            let c_string = find_text.clone();
+            thread::spawn(move || text_finder::find_text(reciever, &c_string));
+        }
+        let mut message_index = 0;
+        loop {
+            match recieve.recv() {
+                Ok(file) => {
+                    message_index = message_index + 1;
+                    match chanels[&message_index % thread_size].send(file) {
+                        Ok(_) => continue,
+                        Err(e) => {
+                            println!("Error when sending message from distributer {}", e);
+                            continue;
+                        }
+                    }
+                }
+                Err(err) => {
+                    println!("Error from distributer {}", err);
+                    break;
+                }
             }
         }
     }
