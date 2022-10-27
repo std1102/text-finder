@@ -4,7 +4,9 @@ use file_reader::file_reader::{AsyncFileEmitter, AsyncFileReciever};
 use std::{
     env::{self, args},
     sync::{mpsc, Arc},
-    thread, usize,
+    thread,
+    time::Duration,
+    usize,
 };
 
 use crate::file_reader::{
@@ -57,7 +59,6 @@ fn main() {
             return;
         }
     }
-    let start_time = SysTime::get_current_milis();
 
     let (tx, rx) = mpsc::channel();
 
@@ -70,6 +71,10 @@ fn main() {
         .to_string();
     println!("Find '{}' in: {}", &find_string, &c_path);
     println!("Number of thread {}", &sys_thread);
+
+    thread::sleep(Duration::from_millis(1500));
+
+    let start_time = SysTime::get_current_milis();
     let t1 = thread::spawn(move || {
         AsyncFileEmitter::emit(tx.clone(), &c_path);
     });

@@ -1,4 +1,6 @@
-use std::thread;
+use std::{borrow::BorrowMut, thread};
+extern crate queues;
+use queues::{IsQueue, Queue};
 
 use crate::{
     common,
@@ -153,7 +155,6 @@ impl AsyncFileReciever {
                     }
                 }
                 Err(err) => {
-                    println!("Error from distributer {}", err);
                     break;
                 }
             }

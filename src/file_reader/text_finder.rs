@@ -17,6 +17,9 @@ pub fn find_text(recieve: Receiver<CustomFile>, find_str: &String) {
                         let reader = io::BufReader::new(o_file);
                         reader.lines().for_each(|l| match l {
                             Ok(line_string) => {
+                                if !line_string.is_ascii() {
+                                    return;
+                                }
                                 if re.is_match(&line_string) {
                                     println!(
                                         "{} | line :: {}",
