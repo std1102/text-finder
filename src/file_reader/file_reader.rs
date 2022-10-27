@@ -1,7 +1,5 @@
-extern crate queues;
-use queues::{IsQueue, Queue};
 use rayon::prelude::*;
-use std::{borrow::BorrowMut, collections::VecDeque, thread};
+use std::{borrow::BorrowMut, collections::VecDeque, fs::ReadDir, thread};
 
 use crate::{
     common,
@@ -100,12 +98,25 @@ pub struct AsyncFileEmitter {}
 pub struct AsyncFileReciever {}
 
 impl AsyncFileEmitter {
-    pub fn emit(transmitter: Sender<File>, path: &str) {
-        Self::bfs_search_file(transmitter, path);
+    pub async fn emit(transmitter: Sender<File>, path: &str) {
+        Self::bfs_search_file(transmitter, path).await;
+    }
+
+    async fn loop_file(transmitter: Sender<File>, file_dir: ReadDir, queue: &mut VecDeque<File>) {
+        file_dir.for_each(|file_path| {
+            let file = FileReaderImpl::get_file_info(
+                file_path.unwrap().path().as_os_str().to_str().unwrap(),
+            );
+            if file.properties.is_folder != TRUE {
+                transmitter.send(file).unwrap();
+            } else {
+                queue.push_back(file);
+            }
+        })
     }
 
     // format path or get absolute path string before pass it here
-    pub fn bfs_search_file(transmitter: Sender<File>, path: &str) {
+    async fn bfs_search_file(transmitter: Sender<File>, path: &str) {
         let file = FileReaderImpl::get_file_info(path);
         if file.properties.is_folder == ERROR {
             println!("Unknown Error");
@@ -125,17 +136,10 @@ impl AsyncFileEmitter {
                 let current_node = queue.pop_front().unwrap();
                 match fs::read_dir(current_node.properties.path) {
                     Ok(file_dir) => {
-                        file_dir.for_each(|file_path| {
-                            let file = FileReaderImpl::get_file_info(
-                                file_path.unwrap().path().as_os_str().to_str().unwrap(),
-                            );
-                            if file.properties.is_folder != TRUE {
-                                transmitter.send(file).unwrap();
-                            } else {
-                                queue.push_back(file);
-                            }
-                        })
-                    },
+                        let async_f_search =
+                            Self::loop_file(transmitter.clone(), file_dir, &mut queue);
+                        async_f_search.await;
+                    }
                     Err(_) => {
                         continue;
                     }
@@ -145,7 +149,7 @@ impl AsyncFileEmitter {
     }
 
     // format path or get absolute path string before pass it here
-    pub fn interval_file(transmitter: Sender<File>, path: &str) {
+    fn interval_file(transmitter: Sender<File>, path: &str) {
         let file = FileReaderImpl::get_file_info(path);
         if file.is_error {
             return;

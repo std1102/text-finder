@@ -20,7 +20,8 @@ mod reactive;
 use std::fs;
 use std::path::PathBuf;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 3 {
@@ -76,7 +77,7 @@ fn main() {
 
     let start_time = SysTime::get_current_milis();
     let t1 = thread::spawn(move || {
-        AsyncFileEmitter::emit(tx.clone(), &c_path);
+        AsyncFileEmitter::emit(tx.clone(), &c_path).await;
     });
 
     let c_find_string = find_string.clone();
