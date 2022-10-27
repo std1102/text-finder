@@ -69,7 +69,7 @@ fn main() {
         .unwrap()
         .to_string();
     println!("Find '{}' in: {}", &find_string, &c_path);
-
+    println!("Number of thread {}", &sys_thread);
     let t1 = thread::spawn(move || {
         AsyncFileEmitter::emit(tx.clone(), &c_path);
     });
