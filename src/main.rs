@@ -1,36 +1,75 @@
 use common::common as SysTime;
+extern crate num_cpus;
 use file_reader::file_reader::{AsyncFileEmitter, AsyncFileReciever};
 use std::{
     env::{self, args},
     sync::{mpsc, Arc},
-    thread,
+    thread, usize,
 };
 
-use crate::file_reader::{file_reader::FileReader, result::READ_RESULT};
+use crate::file_reader::{
+    file_reader::{FileReader, FileReaderImpl},
+    result::READ_RESULT,
+};
 pub mod common;
 pub mod file;
 pub mod file_reader;
 mod reactive;
+use std::fs;
+use std::path::PathBuf;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
+    if args.len() < 3 {
+        println!("Missing argument");
+        return;
+    }
+
+    if args[0].is_empty() && args[1].is_empty() {
+        println!("Missing argument");
+        return;
+    }
     let path = args[1].clone();
     let find_string = args[2].clone();
+    let mut sys_thread = num_cpus::get();
+
+    if args.len() >= 4 {
+        match args[3].trim().parse::<usize>() {
+            Ok(num) => {
+                sys_thread = num;
+            }
+            Err(_) => {
+                println!("Invalid format of agument");
+                return;
+            }
+        }
+    }
 
     match file_reader::file_reader::FileReaderImpl::is_exist(&path.clone()) {
         READ_RESULT::TRUE(_) => {}
         READ_RESULT::FALSE => {
             println!("Folder or file not found!");
+            return;
         }
         READ_RESULT::ERROR => {
             println!("Unknown error");
+            return;
         }
     }
-
     let start_time = SysTime::get_current_milis();
+
     let (tx, rx) = mpsc::channel();
-    let c_path = path.clone();
+
+    let srcdir = PathBuf::from(path);
+    let c_path = fs::canonicalize(&srcdir)
+        .unwrap()
+        .as_os_str()
+        .to_str()
+        .unwrap()
+        .to_string();
+    println!("Find '{}' in: {}", &find_string, &c_path);
+
     let t1 = thread::spawn(move || {
         AsyncFileEmitter::emit(tx.clone(), &c_path);
     });
