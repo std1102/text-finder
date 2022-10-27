@@ -1,6 +1,4 @@
-use queues::*;
-use std::thread;
-extern crate queues;
+use std::{sync::Arc, thread};
 
 use crate::{
     common,
@@ -9,13 +7,9 @@ use crate::{
 };
 use std::{
     fs::{self, metadata},
-    io::{BufRead, ErrorKind, Read},
     path::{Path, PathBuf},
     sync::mpsc::{self, Receiver, Sender},
-    thread::Thread,
 };
-
-use common::common as SysTime;
 
 use super::result::READ_RESULT;
 
@@ -105,25 +99,18 @@ pub struct AsyncFileReciever {}
 
 impl AsyncFileEmitter {
     pub fn emit(transmitter: Sender<File>, path: &str) {
-        let start_time = SysTime::get_current_milis();
         Self::interval_file(transmitter, path);
-        println!(
-            "ASYNC TASK TAKES {}",
-            SysTime::get_current_milis() - start_time
-        );
     }
 
     pub fn interval_file(transmitter: Sender<File>, path: &str) {
-        let mut file = FileReaderImpl::get_file_info(path);
+        let file = FileReaderImpl::get_file_info(path);
         if file.is_error {
             return;
         } else if file.properties.is_folder != TRUE {
             match transmitter.send(file) {
-                Ok(file_msg) => {
-                    return;
-                }
+                Ok(_) => {}
                 Err(error_msg) => {
-                    println!("ERROR FROM TRANSMITTER {:?}", error_msg);
+                    println!("Error when sending file :: {}", error_msg)
                 }
             }
         } else {
@@ -137,54 +124,39 @@ impl AsyncFileEmitter {
                         );
                     });
                 }
-                Err(err) => {
-                    return;
-                }
+                Err(_) => {}
             }
         }
     }
 }
 
 impl AsyncFileReciever {
-    pub fn distribute(recieve: Receiver<File>, thread_size: usize) {
-        let mut queues: Vec<Queue<File>> = Vec::with_capacity(thread_size);
+    pub fn distribute(recieve: Receiver<File>, thread_size: usize, find_text: String) {
         let mut chanels: Vec<Sender<File>> = Vec::with_capacity(thread_size);
-        for i in 0..thread_size {
-            queues.push(Queue::new());
+        for _ in 0..thread_size {
             let (sender, reciever) = mpsc::channel();
             chanels.push(sender);
-            thread::spawn(move || text_finder::find_text(reciever));
+            let c_string = find_text.clone();
+            thread::spawn(move || text_finder::find_text(reciever, &c_string));
         }
-        let mut index = 0;
+        let mut message_index = 0;
         loop {
             match recieve.recv() {
                 Ok(file) => {
-                    index = index + 1;
-                    match chanels[&index % thread_size].send(file) {
-                        Ok(ok) => continue,
-                        Err(e) => continue,
+                    message_index = message_index + 1;
+                    match chanels[&message_index % thread_size].send(file) {
+                        Ok(_) => continue,
+                        Err(e) => {
+                            println!("Error when sending message from distributer {}", e);
+                            continue;
+                        }
                     }
-                    // match queues.iter_mut().min_by(|a, b| a.size().cmp(&b.size())) {
-                    //     Some(quiu) => {
-                    //         // quiu.add(file).unwrap();
-                    //         println!("{}", &file.properties.path);
-                    //         match chanels[&index % thread_size].0.send(file) {
-                    //             Ok(ok) => continue,
-                    //             Err(e) => continue,
-                    //         }
-                    //     }
-                    //     None => {
-                    //         println!("NOT FOUND QUEUE");
-                    //         continue;
-                    //     }
-                    // }
                 }
                 Err(err) => {
-                    println!("ERROR FROM RECIEVER {:?}", err);
+                    println!("Error from distributer {}", err);
                     break;
                 }
             }
         }
-        println!("TOTAL MESSAGE {}", index);
     }
 }

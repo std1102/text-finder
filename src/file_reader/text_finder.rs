@@ -1,35 +1,39 @@
-use crate::file::file::File;
-use futures::{AsyncBufReadExt, StreamExt};
-use std::{io::BufReader, sync::mpsc::Receiver};
+use regex::Regex;
 
-pub fn find_text(recieve: Receiver<File>) {
+use crate::file::file::File as CustomFile;
+use std::fs::File as OsFile;
+use std::io::{self, BufRead};
+use std::sync::mpsc::Receiver;
+
+pub fn find_text(recieve: Receiver<CustomFile>, find_str: &String) {
+    let re = Regex::new(find_str).unwrap();
     loop {
         match recieve.recv() {
             Ok(file) => {
-                match std::fs::read_to_string(file.properties.path) {
-                    Ok(ok) => {
-                        
+                let os_file = OsFile::open(&file.properties.path);
+                match os_file {
+                    Ok(o_file) => {
+                        let mut line_number = 1;
+                        let reader = io::BufReader::new(o_file);
+                        reader.lines().into_iter().for_each(|l| match l {
+                            Ok(line_string) => {
+                                if re.is_match(&line_string) {
+                                    println!(
+                                        "String found at file :: {} | line :: {}",
+                                        &file.properties.path, &line_number
+                                    );
+                                    line_number = line_number + 1;
+                                }
+                            }
+                            Err(_) => {
+                                return;
+                            }
+                        });
                     }
-                    Err(e) => todo!(),
+                    Err(_) => {}
                 }
-                // println!("{}", file.properties.path);
-                // let os_file = std::fs::File::open(&file.properties.path);
-                // match os_file {
-                //     Ok(_file) => {
-                //         let reader = BufReader::new(_file);
-                //         for line in reader.buffer().lines() {
-                //             match line {
-
-                //             }
-                //         }
-                //     }
-                //     Err(_) => {
-                //         println!("ERROR WHEN OPENING FILE");
-                //     }
-                // }
             }
             Err(err) => {
-                println!("ERROR FROM RECIEVER TEXT FINDER {:?}", err);
                 break;
             }
         }
