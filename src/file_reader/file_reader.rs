@@ -37,7 +37,6 @@ pub trait FileReader {
             properties: FileProperties {
                 file_name: String::from("--ERROR--"),
                 file_size: 0.0,
-                is_binary: ERROR,
                 is_folder: ERROR,
                 path: String::from("--ERROR--"),
             },
