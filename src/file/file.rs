@@ -5,7 +5,6 @@ pub struct FileProperties {
     pub file_name: String,
     pub file_size: f32,
     pub is_folder: i8,
-    pub is_binary: i8,
     pub path: String,
 }
 
