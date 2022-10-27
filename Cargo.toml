@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 regex = "1.6.0"
+num_cpus = "1.13.1"
+queues = "1.1.0"

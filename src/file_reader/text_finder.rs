@@ -15,11 +15,14 @@ pub fn find_text(recieve: Receiver<CustomFile>, find_str: &String) {
                     Ok(o_file) => {
                         let mut line_number = 1;
                         let reader = io::BufReader::new(o_file);
-                        reader.lines().into_iter().for_each(|l| match l {
+                        reader.lines().for_each(|l| match l {
                             Ok(line_string) => {
+                                if !line_string.is_ascii() {
+                                    return;
+                                }
                                 if re.is_match(&line_string) {
                                     println!(
-                                        "String found at file :: {} | line :: {}",
+                                        "{} | line :: {}",
                                         &file.properties.path, &line_number
                                     );
                                     line_number = line_number + 1;
