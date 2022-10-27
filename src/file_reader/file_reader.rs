@@ -1,6 +1,7 @@
-use std::{borrow::BorrowMut, thread};
 extern crate queues;
 use queues::{IsQueue, Queue};
+use rayon::prelude::*;
+use std::{borrow::BorrowMut, collections::VecDeque, thread};
 
 use crate::{
     common,
@@ -100,9 +101,50 @@ pub struct AsyncFileReciever {}
 
 impl AsyncFileEmitter {
     pub fn emit(transmitter: Sender<File>, path: &str) {
-        Self::interval_file(transmitter, path);
+        Self::bfs_search_file(transmitter, path);
     }
 
+    // format path or get absolute path string before pass it here
+    pub fn bfs_search_file(transmitter: Sender<File>, path: &str) {
+        let file = FileReaderImpl::get_file_info(path);
+        if file.properties.is_folder == ERROR {
+            println!("Unknown Error");
+            return;
+        } else if !file.properties.is_folder == TRUE {
+            match transmitter.send(file) {
+                Ok(ok) => return,
+                Err(e) => {
+                    println!("Sender Error");
+                    return;
+                }
+            }
+        } else {
+            let mut queue: VecDeque<File> = VecDeque::new();
+            queue.push_back(file);
+            while queue.len() > 0 {
+                let current_node = queue.pop_front().unwrap();
+                match fs::read_dir(current_node.properties.path) {
+                    Ok(file_dir) => {
+                        file_dir.for_each(|file_path| {
+                            let file = FileReaderImpl::get_file_info(
+                                file_path.unwrap().path().as_os_str().to_str().unwrap(),
+                            );
+                            if file.properties.is_folder != TRUE {
+                                transmitter.send(file).unwrap();
+                            } else {
+                                queue.push_back(file);
+                            }
+                        })
+                    },
+                    Err(_) => {
+                        continue;
+                    }
+                }
+            }
+        }
+    }
+
+    // format path or get absolute path string before pass it here
     pub fn interval_file(transmitter: Sender<File>, path: &str) {
         let file = FileReaderImpl::get_file_info(path);
         if file.is_error {
