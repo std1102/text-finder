@@ -1,4 +1,4 @@
-use std::thread;
+use std::thread::{self, JoinHandle};
 
 use crate::{
     file::file::{File, FileProperties},
@@ -9,7 +9,10 @@ use std::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use super::{result::READ_RESULT, search::bfs_search};
+use super::{
+    result::READ_RESULT,
+    search::{bfs_search, recursive_search},
+};
 
 pub const TRUE: i8 = 1;
 pub const FALSE: i8 = 0;
@@ -76,17 +79,20 @@ impl AsyncFileEmitter {
 impl AsyncFileReciever {
     pub fn distribute(reciever: Receiver<File>, thread_size: usize, find_text: String) {
         let mut chanels: Vec<Sender<File>> = Vec::with_capacity(thread_size);
+        let mut read_threads: Vec<JoinHandle<()>> = vec![];
         for _ in 0..thread_size {
             let (sender, reciever) = mpsc::channel();
             chanels.push(sender);
             let c_string = find_text.clone();
-            thread::spawn(move || text_finder::find_text(reciever, &c_string));
+            let t = thread::spawn(move || text_finder::find_text(reciever, &c_string));
+            read_threads.push(t);
         }
         let mut message_index = 0;
         loop {
             match reciever.recv() {
                 Ok(file) => {
                     message_index = message_index + 1;
+                    println!("Send file {}", &file.properties.path);
                     match chanels[&message_index % thread_size].send(file) {
                         Ok(_) => continue,
                         Err(e) => {
@@ -95,11 +101,13 @@ impl AsyncFileReciever {
                         }
                     }
                 }
-                Err(_) => {
-                    break;
-                }
+                Err(_) => break,
             }
         }
+        for thread in read_threads {
+            thread.join().unwrap();
+        }
         println!("Total file scanned {}", &message_index);
+        return;
     }
 }

@@ -12,6 +12,7 @@ use std::{
     path::PathBuf,
     sync::mpsc::{self, Receiver, Sender},
     thread,
+    time::Duration,
 };
 
 pub mod common;
