@@ -8,4 +8,6 @@ edition = "2021"
 [dependencies]
 regex = "1.6.0"
 num_cpus = "1.13.1"
-queues = "1.1.0"
+rayon = "1.5.3"
+tokio = { version = "1.21.2", features = ["full"] }
+clap = { version = "4.0.18", features = ["derive"] }
