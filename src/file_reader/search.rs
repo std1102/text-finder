@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, fs::ReadDir, sync::mpsc::Sender};
 
-use crate::file::file::File as CustomFile;
+use crate::file::file::{File as CustomFile, FileProperties};
 
 use super::file_reader::{self, get_file_metadata, ERROR, FALSE, TRUE};
 
@@ -23,9 +23,9 @@ pub fn bfs_search(transmitter: Sender<CustomFile>, path: &str) {
         return;
     } else if !file.properties.is_folder == TRUE {
         match transmitter.send(file) {
-            Ok(ok) => return,
+            Ok(_) => return,
             Err(e) => {
-                println!("Sender Error");
+                println!("Sender Error {:?}", e);
                 return;
             }
         }

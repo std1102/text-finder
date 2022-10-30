@@ -92,11 +92,9 @@ impl AsyncFileReciever {
             match reciever.recv() {
                 Ok(file) => {
                     message_index = message_index + 1;
-                    println!("Send file {}", &file.properties.path);
                     match chanels[&message_index % thread_size].send(file) {
                         Ok(_) => continue,
                         Err(e) => {
-                            println!("Error when sending message from distributer {}", e);
                             continue;
                         }
                     }

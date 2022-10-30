@@ -12,12 +12,10 @@ pub fn find_text(recieve: Receiver<CustomFile>, find_str: &String) {
     let re = Regex::new(find_str).unwrap();
     let mut waiting_queue: VecDeque<CustomFile> = VecDeque::new();
     loop {
-        println!("THREAD {:?}  :: gau gau gau", std::thread::current().id());
-        match recieve.recv() {
+        match recieve.try_recv() {
             Ok(file) => {
                 waiting_queue.push_back(file);
                 let current_file = waiting_queue.pop_front().unwrap();
-                println!("Recieved {}", &current_file.properties.path);
                 let os_file = OsFile::open(&current_file.properties.path);
                 match os_file {
                     Ok(o_file) => {
@@ -40,7 +38,9 @@ pub fn find_text(recieve: Receiver<CustomFile>, find_str: &String) {
                     Err(_) => continue,
                 }
             }
-            Err(_) => continue,
+            Err(_) => {
+                return;
+            }
         }
     }
 }
